@@ -272,6 +272,7 @@ local Settings = {
     Enabled = false,
     MaxDistance = 2000,
     RefreshRate = 1/60,
+    PerformanceMode = true,  -- Uses lightweight BillboardGui + Highlight instead of manual drawing
     
     -- LOD Settings
     LOD = {
@@ -1512,6 +1513,161 @@ function ChamComponent:Destroy()
     self.highlight:Destroy()
 end
 
+local BillboardTextComponent = {}
+BillboardTextComponent.__index = BillboardTextComponent
+
+function BillboardTextComponent.new(colors)
+    local self = setmetatable({}, BillboardTextComponent)
+    self.billboard = Instance.new("BillboardGui")
+    self.billboard.Name = "ESPBillboard"
+    self.billboard.Size = UDim2.new(0, 200, 0, 50)
+    self.billboard.StudsOffset = Vector3.new(0, 3, 0)
+    self.billboard.AlwaysOnTop = true
+    self.billboard.MaxDistance = Settings.MaxDistance
+    self.billboard.LightInfluence = 0
+    self.billboard.ResetOnSpawn = false
+    
+    self.textLabel = Instance.new("TextLabel")
+    self.textLabel.Name = "NameLabel"
+    self.textLabel.Parent = self.billboard
+    self.textLabel.BackgroundTransparency = 1
+    self.textLabel.Size = UDim2.new(1, 0, 1, 0)
+    self.textLabel.Font = Settings.Components.Name.Font
+    self.textLabel.TextSize = Settings.Components.Name.Size
+    self.textLabel.TextColor3 = Color3.new(1, 1, 1)
+    self.textLabel.TextStrokeTransparency = 0
+    self.textLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+    
+    self.colors = colors
+    self.visible = false
+    self.currentAdornee = nil
+    self.lastName = ""
+    self.lastDistance = 0
+    return self
+end
+
+function BillboardTextComponent:Update(adornee, name, distance, colors)
+    if not adornee or not adornee.Parent then
+        self:Hide()
+        return
+    end
+    
+    if self.currentAdornee ~= adornee then
+        self.billboard.Adornee = adornee
+        self.billboard.Parent = CoreGui
+        self.currentAdornee = adornee
+    end
+    
+    local distBucket = math.floor(distance)
+    if name == self.lastName and distBucket == self.lastDistance and self.visible then
+        return
+    end
+    self.lastName = name
+    self.lastDistance = distBucket
+    
+    local displayText = name
+    if Settings.Components.Distance.Enabled then
+        displayText = name .. " | " .. distBucket .. " studs"
+    end
+    
+    self.textLabel.Text = displayText
+    
+    local passedColors = colors or self.colors
+    if passedColors then
+        if passedColors.text and typeof(passedColors.text) == "Color3" then
+            self.textLabel.TextColor3 = passedColors.text
+        end
+        if passedColors.textOutline and typeof(passedColors.textOutline) == "Color3" then
+            self.textLabel.TextStrokeColor3 = passedColors.textOutline
+        end
+    end
+    
+    self.billboard.Enabled = true
+    self.visible = true
+end
+
+function BillboardTextComponent:Hide()
+    self.billboard.Enabled = false
+    self.visible = false
+    self.lastName = ""
+    self.lastDistance = 0
+end
+
+function BillboardTextComponent:Destroy()
+    self.billboard:Destroy()
+end
+
+local AdornmentBoxComponent = {}
+AdornmentBoxComponent.__index = AdornmentBoxComponent
+
+function AdornmentBoxComponent.new(colors)
+    local self = setmetatable({}, AdornmentBoxComponent)
+    self.adornments = {}
+    self.colors = colors
+    self.visible = false
+    self.currentTarget = nil
+    return self
+end
+
+function AdornmentBoxComponent:Update(target, colors)
+    if not target or not target.Parent then
+        self:Hide()
+        return
+    end
+    
+    if self.currentTarget == target and self.visible then
+        return
+    end
+    
+    self:Hide()
+    self.currentTarget = target
+    
+    local color = BrickColor.new("White")
+    local passedColors = colors or self.colors
+    if passedColors and passedColors.box and typeof(passedColors.box) == "Color3" then
+        color = BrickColor.new(passedColors.box)
+    end
+    
+    local parts = {}
+    if target:IsA("Model") then
+        for _, child in pairs(target:GetDescendants()) do
+            if child:IsA("BasePart") and child.Transparency < 1 then
+                table.insert(parts, child)
+            end
+        end
+    elseif target:IsA("BasePart") then
+        table.insert(parts, target)
+    end
+    
+    for _, part in ipairs(parts) do
+        local adornment = Instance.new("BoxHandleAdornment")
+        adornment.Name = "ESPBox"
+        adornment.Adornee = part
+        adornment.AlwaysOnTop = true
+        adornment.ZIndex = 5
+        adornment.Size = part.Size + Vector3.new(0.1, 0.1, 0.1)
+        adornment.Transparency = 0.6
+        adornment.Color = color
+        adornment.Parent = CoreGui
+        table.insert(self.adornments, adornment)
+    end
+    
+    self.visible = true
+end
+
+function AdornmentBoxComponent:Hide()
+    for _, adornment in ipairs(self.adornments) do
+        adornment:Destroy()
+    end
+    self.adornments = {}
+    self.currentTarget = nil
+    self.visible = false
+end
+
+function AdornmentBoxComponent:Destroy()
+    self:Hide()
+end
+
 --------------------------------------------------------------------------------
 -- SECTION 7: ESP ENTITY CLASS
 --------------------------------------------------------------------------------
@@ -1585,6 +1741,8 @@ function ESPEntity.new(key, entityType, target, category, customData, initialCol
         text = nil,
         lookDirection = nil,
         cham = nil,
+        billboardText = nil,
+        adornmentBox = nil,
     }
     
     return self
@@ -1678,6 +1836,64 @@ function ESPEntity:CreateComponents()
     end
     self.lastSettingsHash = currentHash
     self.componentsCreated = true
+    
+    if Settings.PerformanceMode then
+        if self.components.box then
+            self.components.box:Destroy()
+            self.components.box = nil
+        end
+        if self.components.healthBar then
+            self.components.healthBar:Destroy()
+            self.components.healthBar = nil
+        end
+        if self.components.tracer then
+            self.components.tracer:Destroy()
+            self.components.tracer = nil
+        end
+        if self.components.text then
+            self.components.text:Destroy()
+            self.components.text = nil
+        end
+        
+        local needsText = Settings.Components.Name.Enabled or Settings.Components.Distance.Enabled
+        if needsText and self.entityType ~= "Item" then
+            if not self.components.billboardText then
+                self.components.billboardText = BillboardTextComponent.new(self.colors)
+            end
+        elseif self.components.billboardText then
+            self.components.billboardText:Destroy()
+            self.components.billboardText = nil
+        end
+        
+        if Settings.Components.Box.Enabled and self.entityType ~= "Item" then
+            if not self.components.adornmentBox then
+                self.components.adornmentBox = AdornmentBoxComponent.new(self.colors)
+            end
+        elseif self.components.adornmentBox then
+            self.components.adornmentBox:Destroy()
+            self.components.adornmentBox = nil
+        end
+        
+        if self.components.cham and not Settings.Components.Chams.Enabled then
+            self.components.cham:Destroy()
+            self.components.cham = nil
+        end
+        if Settings.Components.Chams.Enabled then
+            if not self.components.cham then
+                self.components.cham = ChamComponent.new(self.colors)
+            end
+        end
+        return
+    end
+    
+    if self.components.billboardText then
+        self.components.billboardText:Destroy()
+        self.components.billboardText = nil
+    end
+    if self.components.adornmentBox then
+        self.components.adornmentBox:Destroy()
+        self.components.adornmentBox = nil
+    end
     
     -- Box - destroy if disabled or style changed or is Item
     if self.components.box then
@@ -1950,6 +2166,33 @@ function ESPEntity:Update(camera, dt)
     
     -- Create/update components based on LOD
     self:CreateComponents()
+    
+    if Settings.PerformanceMode then
+        local humanoid = self:GetHumanoid()
+        if humanoid then
+            self.health = humanoid.Health
+            self.maxHealth = humanoid.MaxHealth
+        end
+        
+        if self.components.billboardText then
+            local head = self.target:IsA("Model") and self.target:FindFirstChild("Head") or rootPart
+            local displayName = self:GetBaseName()
+            self.components.billboardText:Update(head, displayName, self.distance, self.colors)
+        end
+        
+        if self.components.adornmentBox then
+            self.components.adornmentBox:Update(self.target, self.colors)
+        end
+        
+        if self.components.cham then
+            local chamTarget = self.target:IsA("Model") and self.target or self.target.Parent
+            self.components.cham:Update(chamTarget, self.colors)
+        end
+        
+        self.isVisible = true
+        self.lastUpdate = tick()
+        return true
+    end
     
     -- Calculate box bounds with interpolation
     if not self:CalculateBoxBounds(rootPart, camera, dt) then
