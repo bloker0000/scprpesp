@@ -64,15 +64,6 @@ local LOD_FAR_SQ = 0
 
 local REFRESH_INTERVAL = 2.0
 
-local function AnyCategoryEnabled()
-    return Settings.Categories.Player.enabled or
-           Settings.Categories.SCP_Player.enabled or
-           Settings.Categories.SCP_NPC.enabled or
-           Settings.Categories.SCP963.enabled or
-           Settings.Categories.Staff.enabled or
-           Settings.Categories.Traitor.enabled or
-           Settings.Categories.Medical.enabled
-end
 local STAFF_CACHE_DURATION = 60
 local SORT_INTERVAL = 1.0
 
@@ -298,9 +289,9 @@ local Settings = {
         SCP963 = { enabled = true, priority = 100 },
         SCP_NPC = { enabled = true, priority = 90 },
         SCP_Player = { enabled = true, priority = 85 },
-        Staff = { enabled = true, priority = 80 },
-        Traitor = { enabled = true, priority = 75 },
-        Medical = { enabled = false, priority = 70 },
+        Traitor = { enabled = true, priority = 80 },
+        Staff = { enabled = true, priority = 75 },
+        Medical = { enabled = true, priority = 70 },
         Player = { enabled = true, priority = 50 },
     },
     
@@ -360,6 +351,16 @@ local Settings = {
     -- SCP963 Special
     SCP963Spectate = false,
 }
+
+local function AnyCategoryEnabled()
+    return Settings.Categories.Player.enabled or
+           Settings.Categories.SCP_Player.enabled or
+           Settings.Categories.SCP_NPC.enabled or
+           Settings.Categories.SCP963.enabled or
+           Settings.Categories.Staff.enabled or
+           Settings.Categories.Traitor.enabled or
+           Settings.Categories.Medical.enabled
+end
 
 local function updateDistanceSquares()
     MAX_DISTANCE_SQ = Settings.MaxDistance * Settings.MaxDistance
