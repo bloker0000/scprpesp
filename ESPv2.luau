@@ -62,10 +62,10 @@ local LOD_NEAR_SQ = 0
 local LOD_MEDIUM_SQ = 0
 local LOD_FAR_SQ = 0
 
-local REFRESH_INTERVAL = 2.0
+local REFRESH_INTERVAL = 1.0
 
 local STAFF_CACHE_DURATION = 60
-local SORT_INTERVAL = 1.0
+local SORT_INTERVAL = 0.5
 
 -- Environment
 local env = getgenv and getgenv() or {}
@@ -273,7 +273,7 @@ local Settings = {
     Enabled = false,
     MaxDistance = 2000,
     RefreshRate = 1/60,
-    PerformanceMode = true,  -- Uses lightweight BillboardGui + Highlight instead of manual drawing
+    PerformanceMode = false,  -- Disabled - uses standard ESP rendering
     
     -- LOD Settings
     LOD = {
@@ -351,16 +351,6 @@ local Settings = {
     -- SCP963 Special
     SCP963Spectate = false,
 }
-
-local function AnyCategoryEnabled()
-    return Settings.Categories.Player.enabled or
-           Settings.Categories.SCP_Player.enabled or
-           Settings.Categories.SCP_NPC.enabled or
-           Settings.Categories.SCP963.enabled or
-           Settings.Categories.Staff.enabled or
-           Settings.Categories.Traitor.enabled or
-           Settings.Categories.Medical.enabled
-end
 
 local function updateDistanceSquares()
     MAX_DISTANCE_SQ = Settings.MaxDistance * Settings.MaxDistance
@@ -2407,16 +2397,16 @@ function ESPManager:GetEntity(key)
 end
 
 function ESPManager:UpdateAll(dt)
-    if not Settings.Enabled then
-        return
-    end
-    
-    if not AnyCategoryEnabled() then
-        return
-    end
-    
     self.frameCount = self.frameCount + 1
     self.timeSinceSort = (self.timeSinceSort or 0) + dt
+    
+    if not Settings.Enabled then
+        for i = 1, #self.entityKeys do
+            local entity = self.entities[self.entityKeys[i]]
+            if entity then entity:Hide() end
+        end
+        return
+    end
     
     local camera = Workspace.CurrentCamera
     if not camera then return end
@@ -2764,10 +2754,6 @@ local function CreatePlayerESP(player)
 end
 
 local function RefreshAllESP()
-    if not Settings.Enabled or not AnyCategoryEnabled() then
-        return
-    end
-    
     refreshToRemoveCount = 0
     
     for i = 1, #ESPManager.entityKeys do
@@ -3013,21 +2999,17 @@ local function Initialize()
     
     -- Workspace descendant added (for NPC SCPs and SCP-963)
     ESPManager:Track(Workspace.DescendantAdded:Connect(function(descendant)
-        if not Settings.Enabled then return end
-        
-        if descendant.Name == "SCP-963" and descendant:IsA("BasePart") and Settings.Categories.SCP963.enabled then
+        if descendant.Name == "SCP-963" and descendant:IsA("BasePart") then
             task.wait(0.1)
             CreateSCP963ESP()
         end
         
-        if Settings.Categories.SCP_NPC.enabled then
-            for _, scpData in ipairs(NPCSCPData) do
-                local model = CachedNPCModels[scpData.Name]
-                if model and descendant:IsDescendantOf(model) then
-                    task.wait(0.1)
-                    CreateNPCSCPESP(scpData)
-                    break
-                end
+        for _, scpData in ipairs(NPCSCPData) do
+            local model = CachedNPCModels[scpData.Name]
+            if model and descendant:IsDescendantOf(model) then
+                task.wait(0.1)
+                CreateNPCSCPESP(scpData)
+                break
             end
         end
     end))
@@ -3039,13 +3021,10 @@ local function Initialize()
     
     ESPManager:Track(RunService.RenderStepped:Connect(function()
         if not isCurrentInstance() then return end
-        if not Settings.Enabled then return end
         
         local now = tick()
         local dt = now - lastFrame
         lastFrame = now
-        
-        if not AnyCategoryEnabled() then return end
         
         if now - lastRefresh >= REFRESH_INTERVAL and not isRefreshRunning then
             lastRefresh = now
