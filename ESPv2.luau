@@ -2079,13 +2079,28 @@ function ESPEntity:Update(camera, dt)
             return false
         end
         
+        self:CreateComponents()
+        
+        if Settings.PerformanceMode then
+            if self.components.billboardText and self.entityType == "SCP963" then
+                local displayName = self:GetBaseName()
+                self.components.billboardText:Update(rootPart, displayName, self.distance, self.colors)
+            end
+            
+            if self.components.cham then
+                self.components.cham:Update(rootPart, self.colors)
+            end
+            
+            self.isVisible = true
+            self.lastUpdate = tick()
+            return true
+        end
+        
         local screenPos, visible = camera:WorldToViewportPoint(rootPart.Position)
         if not visible or screenPos.Z < 0 then
             self:Hide()
             return false
         end
-        
-        self:CreateComponents()
         
         local size = rootPart.Size
         local height = math.max(size.Y, size.X, size.Z) * 50 / self.distance
@@ -2116,6 +2131,7 @@ function ESPEntity:Update(camera, dt)
         
         if self.components.cham then
             self.components.cham:Update(rootPart, self.colors)
+        end
         end
         
         self.isVisible = true
