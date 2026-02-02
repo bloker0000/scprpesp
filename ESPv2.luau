@@ -62,15 +62,12 @@ local LOD_NEAR_SQ = 0
 local LOD_MEDIUM_SQ = 0
 local LOD_FAR_SQ = 0
 
-local REFRESH_BATCH_SIZE = 20
-local REFRESH_INTERVAL = 3.0
+local REFRESH_BATCH_SIZE = 10
+local REFRESH_INTERVAL = 1.0
 local STAFF_CACHE_DURATION = 60
-local SORT_INTERVAL = 1.0
+local SORT_INTERVAL = 0.5
 local isRefreshing = false
 local refreshCoroutine = nil
-
-local LOD3_UPDATE_INTERVAL = 3
-local LOD4_UPDATE_INTERVAL = 6
 
 -- Environment
 local env = getgenv and getgenv() or {}
@@ -279,13 +276,13 @@ local Settings = {
     MaxDistance = 2000,
     RefreshRate = 1/60,
     
-    -- LOD Settings (increased distances so full ESP shows farther)
+    -- LOD Settings
     LOD = {
         Enabled = true,
-        NearDistance = 150,
-        MediumDistance = 400,
-        FarDistance = 800,
-        MaxEntities = 50,
+        NearDistance = 200,
+        MediumDistance = 500,
+        FarDistance = 1000,
+        MaxEntities = 100,
     },
     
     -- Category Enables
@@ -2080,43 +2077,6 @@ function ESPEntity:GetDisplayName()
     end
 end
 
-function ESPEntity:UpdateInterpolateOnly(camera, dt)
-    if not self.isVisible then
-        return false
-    end
-    
-    dt = dt or 0.016
-    local lerpFactor = math.min(1, dt * self.interpolationSpeed)
-    
-    self.boxBounds.x = self.boxBounds.x + (self.targetBoxBounds.x - self.boxBounds.x) * lerpFactor
-    self.boxBounds.y = self.boxBounds.y + (self.targetBoxBounds.y - self.boxBounds.y) * lerpFactor
-    self.boxBounds.w = self.boxBounds.w + (self.targetBoxBounds.w - self.boxBounds.w) * lerpFactor
-    self.boxBounds.h = self.boxBounds.h + (self.targetBoxBounds.h - self.boxBounds.h) * lerpFactor
-    
-    local b = self.boxBounds
-    
-    if self.components.box then
-        local style = Settings.Components.Box.Style
-        if style == "Corner" then
-            self.components.box:UpdateCornerBox(b.x, b.y, b.w, b.h, self.colors)
-        elseif style == "Square" then
-            self.components.box:UpdateSquareBox(b.x, b.y, b.w, b.h, self.colors)
-        else
-            self.components.box:UpdateCornerBox(b.x, b.y, b.w, b.h, self.colors)
-        end
-    end
-    
-    if self.components.healthBar then
-        self.components.healthBar:Update(b.x, b.y, b.w, b.h, self.health, self.maxHealth, self.colors)
-    end
-    
-    if self.components.tracer then
-        self.components.tracer:Update(self.screenPosition, self.colors)
-    end
-    
-    return true
-end
-
 function ESPEntity:Hide()
     for name, component in pairs(self.components) do
         if component then
@@ -2255,7 +2215,6 @@ function ESPManager:UpdateAll(dt)
     
     local updated = 0
     local maxEntities = Settings.LOD.MaxEntities
-    local frame = self.frameCount
     
     for i = 1, #self.sortedCache do
         local data = self.sortedCache[i]
@@ -2263,21 +2222,7 @@ function ESPManager:UpdateAll(dt)
             data.entity:Hide()
         else
             local entity = data.entity
-            local lod = entity.lodLevel or 1
-            
-            local shouldFullUpdate = true
-            if lod == 3 then
-                shouldFullUpdate = (frame % LOD3_UPDATE_INTERVAL) == (i % LOD3_UPDATE_INTERVAL)
-            elseif lod >= 4 then
-                shouldFullUpdate = (frame % LOD4_UPDATE_INTERVAL) == (i % LOD4_UPDATE_INTERVAL)
-            end
-            
-            local success
-            if shouldFullUpdate then
-                success = entity:Update(camera, dt)
-            else
-                success = entity:UpdateInterpolateOnly(camera, dt)
-            end
+            local success = entity:Update(camera, dt)
             
             if success then
                 updated = updated + 1
