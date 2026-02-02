@@ -2132,7 +2132,6 @@ function ESPEntity:Update(camera, dt)
         if self.components.cham then
             self.components.cham:Update(rootPart, self.colors)
         end
-        end
         
         self.isVisible = true
         self.lastUpdate = tick()
