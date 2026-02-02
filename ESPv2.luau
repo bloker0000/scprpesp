@@ -62,12 +62,9 @@ local LOD_NEAR_SQ = 0
 local LOD_MEDIUM_SQ = 0
 local LOD_FAR_SQ = 0
 
-local REFRESH_BATCH_SIZE = 10
 local REFRESH_INTERVAL = 1.0
 local STAFF_CACHE_DURATION = 60
 local SORT_INTERVAL = 0.5
-local isRefreshing = false
-local refreshCoroutine = nil
 
 -- Environment
 local env = getgenv and getgenv() or {}
@@ -701,26 +698,14 @@ local function FormatHealth(health)
     end
 end
 
-local distanceStringCache = {}
-local DISTANCE_CACHE_BUCKETS = 50
-
 local function FormatDistance(distance)
-    local bucket = math.floor(distance / DISTANCE_CACHE_BUCKETS) * DISTANCE_CACHE_BUCKETS
     local unit = Settings.Components.Distance.Unit
-    local cacheKey = bucket * 10 + (unit == "Meters" and 1 or 0)
     
-    if distanceStringCache[cacheKey] then
-        return distanceStringCache[cacheKey]
-    end
-    
-    local str
     if unit == "Meters" then
-        str = tostring(math.floor(bucket * 0.28)) .. "m"
+        return tostring(math.floor(distance * 0.28)) .. "m"
     else
-        str = tostring(bucket) .. " studs"
+        return tostring(math.floor(distance)) .. " studs"
     end
-    distanceStringCache[cacheKey] = str
-    return str
 end
 
 local function LerpColor(c1, c2, t)
@@ -2515,7 +2500,6 @@ end
 
 local function RefreshAllESP()
     refreshToRemoveCount = 0
-    local batchCount = 0
     
     for i = 1, #ESPManager.entityKeys do
         local key = ESPManager.entityKeys[i]
@@ -2525,11 +2509,6 @@ local function RefreshAllESP()
             refreshToRemove[refreshToRemoveCount] = key
         else
             local valid = true
-            batchCount = batchCount + 1
-            if batchCount >= REFRESH_BATCH_SIZE then
-                batchCount = 0
-                RunService.RenderStepped:Wait()
-            end
         
         if entity.entityType == "Player" or entity.entityType == "Staff" or 
            entity.entityType == "SCP_Player" or entity.entityType == "Traitor" or 
@@ -2651,14 +2630,8 @@ local function RefreshAllESP()
         playersListDirty = false
     end
     
-    local playerBatch = 0
     for i = 1, #cachedPlayersList do
         local player = cachedPlayersList[i]
-        playerBatch = playerBatch + 1
-        if playerBatch >= REFRESH_BATCH_SIZE then
-            playerBatch = 0
-            RunService.RenderStepped:Wait()
-        end
         if player ~= LocalPlayer and player.Parent then
             if player.Team then
                 local success, color = pcall(function()
