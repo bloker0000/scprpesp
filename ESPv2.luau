@@ -62,9 +62,9 @@ local LOD_NEAR_SQ = 0
 local LOD_MEDIUM_SQ = 0
 local LOD_FAR_SQ = 0
 
-local REFRESH_INTERVAL = 1.0
+local REFRESH_INTERVAL = 2.0
 local STAFF_CACHE_DURATION = 60
-local SORT_INTERVAL = 0.5
+local SORT_INTERVAL = 1.0
 
 -- Environment
 local env = getgenv and getgenv() or {}
@@ -1615,41 +1615,34 @@ function AdornmentBoxComponent:Update(target, colors)
         return
     end
     
-    if self.currentTarget == target and self.visible then
+    if self.currentTarget == target and self.visible and #self.adornments > 0 then
         return
     end
     
-    self:Hide()
-    self.currentTarget = target
-    
-    local color = BrickColor.new("White")
-    local passedColors = colors or self.colors
-    if passedColors and passedColors.box and typeof(passedColors.box) == "Color3" then
-        color = BrickColor.new(passedColors.box)
-    end
-    
-    local parts = {}
-    if target:IsA("Model") then
-        for _, child in pairs(target:GetDescendants()) do
-            if child:IsA("BasePart") and child.Transparency < 1 then
-                table.insert(parts, child)
-            end
+    if self.currentTarget ~= target then
+        self:Hide()
+        self.currentTarget = target
+        
+        local color = BrickColor.new("White")
+        local passedColors = colors or self.colors
+        if passedColors and passedColors.box and typeof(passedColors.box) == "Color3" then
+            color = BrickColor.new(passedColors.box)
         end
-    elseif target:IsA("BasePart") then
-        table.insert(parts, target)
-    end
-    
-    for _, part in ipairs(parts) do
-        local adornment = Instance.new("BoxHandleAdornment")
-        adornment.Name = "ESPBox"
-        adornment.Adornee = part
-        adornment.AlwaysOnTop = true
-        adornment.ZIndex = 5
-        adornment.Size = part.Size + Vector3.new(0.1, 0.1, 0.1)
-        adornment.Transparency = 0.6
-        adornment.Color = color
-        adornment.Parent = CoreGui
-        table.insert(self.adornments, adornment)
+        
+        local rootPart = target:IsA("Model") and (target:FindFirstChild("HumanoidRootPart") or target.PrimaryPart) or target
+        if rootPart and rootPart:IsA("BasePart") then
+            local adornment = Instance.new("BoxHandleAdornment")
+            adornment.Name = "ESPBox"
+            adornment.Adornee = rootPart
+            adornment.AlwaysOnTop = true
+            adornment.ZIndex = 5
+            local size = target:IsA("Model") and target:GetExtentsSize() or rootPart.Size
+            adornment.Size = size + Vector3.new(0.2, 0.2, 0.2)
+            adornment.Transparency = 0.7
+            adornment.Color = color
+            adornment.Parent = CoreGui
+            table.insert(self.adornments, adornment)
+        end
     end
     
     self.visible = true
@@ -2169,20 +2162,10 @@ function ESPEntity:Update(camera, dt)
         return false
     end
     
-    -- Check if on screen
-    local screenPos, visible = camera:WorldToViewportPoint(rootPart.Position)
-    if not visible or screenPos.Z < 0 then
-        self:Hide()
-        return false
-    end
-    
-    -- Calculate LOD
-    self:CalculateLOD()
-    
-    -- Create/update components based on LOD
-    self:CreateComponents()
-    
+    -- PerformanceMode: Skip screen visibility check, BillboardGui/Highlight handle it
     if Settings.PerformanceMode then
+        self:CreateComponents()
+        
         local humanoid = self:GetHumanoid()
         if humanoid then
             self.health = humanoid.Health
@@ -2208,6 +2191,19 @@ function ESPEntity:Update(camera, dt)
         self.lastUpdate = tick()
         return true
     end
+    
+    -- Non-PerformanceMode: Check if on screen
+    local screenPos, visible = camera:WorldToViewportPoint(rootPart.Position)
+    if not visible or screenPos.Z < 0 then
+        self:Hide()
+        return false
+    end
+    
+    -- Calculate LOD
+    self:CalculateLOD()
+    
+    -- Create/update components based on LOD
+    self:CreateComponents()
     
     -- Calculate box bounds with interpolation
     if not self:CalculateBoxBounds(rootPart, camera, dt) then
